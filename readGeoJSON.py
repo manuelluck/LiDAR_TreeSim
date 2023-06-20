@@ -90,7 +90,9 @@ class GeoJSON2SimCloud:
             self.path['wdir']       = Path(self.projectDir)
             self.path['meta']       = self.path['wdir'].joinpath('MetaData')
             self.path['export']     = self.path['wdir'].joinpath('Export')
-            self.path['blender']    = self.path['export'].joinpath('Blender')
+            self.path['blender']    = self.path['wdir'].joinpath('Blender')
+            self.path['helios']     = self.path['wdir'].joinpath('Helios')
+            self.path['trajectory'] = self.path['helios'].joinpath('Trajectory')
             self.path['pdf']        = self.path['export'].joinpath('PDF')
             self.path['png']        = self.path['export'].joinpath('PNG')
 
@@ -123,6 +125,8 @@ class GeoJSON2SimCloud:
             self.path['blender'].mkdir(parents=True, exist_ok=True)
             self.path['pdf'].mkdir(parents=True, exist_ok=True)
             self.path['png'].mkdir(parents=True, exist_ok=True)
+            self.path['helios'].mkdir(parents=True, exist_ok=True)
+            self.path['trajectory'].mkdir(parents=True, exist_ok=True)
 
             self.loadDwGeoJSON()
             self.loadTreeGeoJSON()
@@ -133,6 +137,7 @@ class GeoJSON2SimCloud:
             self.scanPatterns['LFI']                = dict()
             self.scanPatterns['LFI']['extend']      = [[-25,25],[25,-25]]
             self.updateScanLine()  # scanline is derived from extend -- callable update if extend is changed
+            self.createLeg4HeliosMLS()  # create trj file for Scanline
 
         def updateScanLine(self):
             self.scanPatterns['LFI']['scanLine'] = [[0, 0],
@@ -158,13 +163,13 @@ class GeoJSON2SimCloud:
                                                      self.scanPatterns['LFI']['extend'][1][1]],
                                                     [0, 0]]
         def createLeg4HeliosMLS(self,rpmRoll=26,vWalk=1.0):
-            self.scanPatterns['LFI']['legs'] = [['#TIME_COLUMN: 0'],
-                                                ['#HEADER: "t", "roll", "pitch", "yaw", "x", "y", "z"']]
+            self.scanPatterns['LFI']['legs'] = ['#TIME_COLUMN: 0',
+                                                '#HEADER: "t", "roll", "pitch", "yaw", "x", "y", "z"']
             t       = 0
             roll    = 0
 
             for i in range(len(self.scanPatterns['LFI']['scanLine'])):
-                pos = self.scanPatterns['LFI']['scanline'][i]
+                pos = self.scanPatterns['LFI']['scanLine'][i]
                 if i == 0:
                     t       = 0
                     roll    = 0
@@ -174,7 +179,7 @@ class GeoJSON2SimCloud:
                     y       = pos[1]
                     z       = 1.2
                 else:
-                    posOld = self.scanPatterns['LFI']['scanline'][i-1]
+                    posOld = self.scanPatterns['LFI']['scanLine'][i-1]
                     dx      = posOld[0]-pos[0]
                     dy      = posOld[1]-pos[1]
                     l       = (dx**2 + dy**2)**(1/2)
@@ -187,8 +192,94 @@ class GeoJSON2SimCloud:
                     x       = pos[0]
                     y       = pos[1]
                     z       = 1.2
-                self.scanPatterns['LFI']['legs'].append([f'{t}, {pitch}, {roll}, {yaw}, {x}, {y}, {z}'])
+                self.scanPatterns['LFI']['legs'].append(f'{t}, {pitch}, {roll}, {yaw}, {x}, {y}, {z}')
 
+            with open(self.path['trajectory'].joinpath('MLS.trj'), mode="wt") as f:
+                for line in self.scanPatterns['LFI']['legs']:
+                    f.write(f'{line}\n')
+
+        def writeXml4Helios(self,trj='MLS.trj',scannerPath='data/scanners_tls.xml',scannerName='vlp16'):
+            for plot in self.plots.keys():
+                groundObj   = str(self.plots[plot]['ground4Helios'])
+                grassObj    = str(self.plots[plot]['grass4Helios'])
+                lowVegObj   = str(self.plots[plot]['lowVeg4Helios'])
+                dwObj       = str(self.plots[plot]['dw4Helios'])
+                treeObj     = str(self.plots[plot]['tree4Helios'])
+
+                self.plots[plot]['scannerPath'] = scannerPath
+                self.plots[plot]['scanner']     = scannerName
+                self.plots[plot]['scenePath']   = self.plots[plot]['heliosPath'].joinpath(f'xml/scene_{plot}.xml')
+                self.plots[plot]['sceneName']   = f'scene_{plot}'
+                self.plots[plot]['surveyPath']  = self.plots[plot]['heliosPath'].joinpath(
+                                                                        f'xml/{self.plots[plot]["plotName"]}.xml')
+                self.plots[plot]['xmlFolder']   = self.plots[plot]['heliosPath'].joinpath('xml/')
+                self.plots[plot]['xmlFolder'].mkdir(parents=True,exist_ok=True)
+
+                surveyXML = [f'<?xml version="1.0" encoding="UTF-8"?>',
+                             f'<document>',
+                             f'\t<scannerSettings id="scaset" active="true" pulseFreq_hz="180000" scanFreq_hz="100"/>',
+                             f'\t<survey name="{self.plots[plot]["plotName"]}" ',
+                             f'\t\tscene="{self.plots[plot]["scenePath"]}#{self.plots[plot]["sceneName"]}" ',
+                             f'\t\tplatform="interpolated" basePlatform="data/platforms.xml#sr22" ',
+                             f'\t\tscanner="{self.plots[plot]["scannerPath"]}#{self.plots[plot]["scanner"]}">',
+                             f'\t\t<leg>',
+                             f'\t\t\t<platformSettings ',
+                             f'\t\t\t\ttrajectory="{self.path["trajectory"].joinpath(trj)}"',
+                             f'\t\t\t\ttIndex="0" xIndex="4" yIndex="5" zIndex="6" ',
+                             f'\t\t\t\trollIndex="1" pitchIndex="2" yawIndex="3"',
+                             f'\t\t\t\tslopeFilterThreshold="0.0" toRadians="true" syncGPSTime="true"',
+                             f'\t\t\t\ttStart="0" tEnd="5" teleportToStart="true"',
+                             f'\t\t\t/>',
+                             f'\t\t\t<scannerSettings template="scaset" trajectoryTimeInterval_s="0.01"/>',
+                             f'\t\t</leg>',
+                             f'\t</survey>',
+                             f'</document>'
+                             ]
+
+                sceneXML = [f'<?xml version="1.0" encoding="UTF-8"?>',
+                            f'<document>',
+                            f'\t<scene id="{self.plots[plot]["sceneName"]}" name="{self.plots[plot]["sceneName"]}">',
+                            f'\t\t<part>',
+                            f'\t\t\t<filter type="objloader">',
+                            f'\t\t\t\t<param type="string" key="filepath" value="{str(self.plots[plot]["ground4Helios"])}" />',
+                            f'\t\t\t</filter>',
+                            f'\t\t</part>',
+                            f'\t\t<part>',
+                            f'\t\t\t<filter type="objloader">',
+                            f'\t\t\t\t<param type="string" key="filepath" value="{str(self.plots[plot]["grass4Helios"])}" />',
+                            f'\t\t\t</filter>',
+                            f'\t\t</part>',
+                            f'\t\t<part>',
+                            f'\t\t\t<filter type="objloader">',
+                            f'\t\t\t\t<param type="string" key="filepath" value="{str(self.plots[plot]["lowVeg4Helios"])}" />',
+                            f'\t\t\t</filter>',
+                            f'\t\t</part>',
+                            f'\t\t<part>',
+                            f'\t\t\t<filter type="objloader">',
+                            f'\t\t\t\t<param type="string" key="filepath" value="{str(self.plots[plot]["tree4Helios"])}" />',
+                            f'\t\t\t</filter>',
+                            f'\t\t</part>',
+                            f'\t\t<part>',
+                            f'\t\t\t<filter type="objloader">',
+                            f'\t\t\t\t<param type="string" key="filepath" value="{str(self.plots[plot]["dw4Helios"])}" />',
+                            f'\t\t\t</filter>',
+                            f'\t\t</part>',
+                            f'\t</scene>',
+                            f'</document>'
+                            ]
+                with open(self.plots[plot]['surveyPath'], mode="wt") as t:
+                    for line in surveyXML:
+                        t.write(f'{line}\n')
+                with open(self.plots[plot]['scenePath'], mode="wt") as t:
+                    for line in sceneXML:
+                        t.write(f'{line}\n')
+
+        def runHelios(self):
+            for plot in self.plots.keys():
+                subprocess.run(['H:/Helios/helios-plusplus-win/run/helios.exe',
+                                f'{str(self.plots[plot]["surveyPath"])}',
+                                f'outputPath={str(self.plots[plot]["heliosPath"])}'],
+                               cwd='H:/Helios/helios-plusplus-win/')
         def loadDwGeoJSON(self):
             with open(self.path['dwData'], 'r') as f:
                 gj = geojson.load(f)
@@ -211,51 +302,107 @@ class GeoJSON2SimCloud:
                 for key, value in self.path.items():
                     f.write(f'{key},{value}\n')
 
-        def preparePlots(self,scanPattern='LFI'):
-            for plot in range(len(self.plotPositions)):
+        def preparePlots(self,scanPattern='LFI',singlePlot=None):
+            if singlePlot is None:
+                for plot in range(len(self.plotPositions)):
+                    E = self.plotPositions[plot][0]
+                    N = self.plotPositions[plot][1]
+                    # getting Corners
+                    ul      = [E+self.scanPatterns[scanPattern]['extend'][0][0],
+                               N+self.scanPatterns[scanPattern]['extend'][1][0]]
+                    lr      = [E+self.scanPatterns[scanPattern]['extend'][0][1],
+                               N+self.scanPatterns[scanPattern]['extend'][1][1]]
+
+                    # selecting Features in Plot
+                    dwPlot      = [dw for dw in self.dwData if any([all([dw['geometry']['coordinates'][0][0] >= ul[0],
+                                                                         dw['geometry']['coordinates'][0][0] <= lr[0],
+                                                                         dw['geometry']['coordinates'][0][1] <= ul[1],
+                                                                         dw['geometry']['coordinates'][0][1] >= lr[1]]),
+                                                                    all([dw['geometry']['coordinates'][0][0] >= ul[0],
+                                                                         dw['geometry']['coordinates'][0][0] <= lr[0],
+                                                                         dw['geometry']['coordinates'][0][1] <= ul[1],
+                                                                         dw['geometry']['coordinates'][0][1] >= lr[1]])
+                                                                    ])]
+                    treesPlot   = [tree for tree in self.treeData if all([tree['geometry']['coordinates'][0] >= ul[0],
+                                                                          tree['geometry']['coordinates'][0] <= lr[0],
+                                                                          tree['geometry']['coordinates'][1] <= ul[1],
+                                                                          tree['geometry']['coordinates'][1] >= lr[1]])]
+
+                    plot4blend = self.path['blender'].joinpath(f'plot_{plot:03d}')
+                    plot4blend.mkdir(parents=True, exist_ok=True)
+
+                    dfTree  = self.convert2pd(treesPlot,[E,N])
+                    dfTree  = self.cleanDf(dfTree)
+                    dfTree.to_csv(plot4blend.joinpath('tree.csv'))
+
+                    dfDw    = self.convert2pd(dwPlot,[E,N])
+                    dfDw    = self.cleanDf(dfDw)
+                    dfDw.to_csv(plot4blend.joinpath('dw.csv'))
+
+                    self.plots[f'{plot:03d}']               = dict()
+                    self.plots[f'{plot:03d}']['heliosPath'] = self.path['helios'].joinpath(f'plot_{plot:03d}')
+                    self.plots[f'{plot:03d}']['blenderPath']= self.path['blender'].joinpath(f'plot_{plot:03d}')
+                    self.plots[f'{plot:03d}']['plotName']   = f'Plot_{plot:03d}'
+                    self.plots[f'{plot:03d}']['dwPath']     = plot4blend.joinpath('dw.csv')
+                    self.plots[f'{plot:03d}']['treePath']   = plot4blend.joinpath('tree.csv')
+                    self.plots[f'{plot:03d}']['dwData']     = dfDw
+                    self.plots[f'{plot:03d}']['treeData']   = dfTree
+                    self.plots[f'{plot:03d}']['center']     = self.plotPositions[plot]
+                    self.plots[f'{plot:03d}']['scanLine']   = np.vstack([[s[0]+E,s[1]+N] for s in
+                                                                         self.scanPatterns[scanPattern]['scanLine']])
+
+                    self.plots[f'{plot:03d}']['blenderPath'].mkdir(parents=True, exist_ok=True)
+                    self.plots[f'{plot:03d}']['heliosPath'].mkdir(parents=True,exist_ok=True)
+            else:
+                plot = int(singlePlot)
                 E = self.plotPositions[plot][0]
                 N = self.plotPositions[plot][1]
                 # getting Corners
-                ul      = [E+self.scanPatterns[scanPattern]['extend'][0][0],
-                           N+self.scanPatterns[scanPattern]['extend'][1][0]]
-                lr      = [E+self.scanPatterns[scanPattern]['extend'][0][1],
-                           N+self.scanPatterns[scanPattern]['extend'][1][1]]
+                ul = [E + self.scanPatterns[scanPattern]['extend'][0][0],
+                      N + self.scanPatterns[scanPattern]['extend'][1][0]]
+                lr = [E + self.scanPatterns[scanPattern]['extend'][0][1],
+                      N + self.scanPatterns[scanPattern]['extend'][1][1]]
 
                 # selecting Features in Plot
-                dwPlot      = [dw for dw in self.dwData if any([all([dw['geometry']['coordinates'][0][0] >= ul[0],
-                                                                     dw['geometry']['coordinates'][0][0] <= lr[0],
-                                                                     dw['geometry']['coordinates'][0][1] <= ul[1],
-                                                                     dw['geometry']['coordinates'][0][1] >= lr[1]]),
-                                                                all([dw['geometry']['coordinates'][0][0] >= ul[0],
-                                                                     dw['geometry']['coordinates'][0][0] <= lr[0],
-                                                                     dw['geometry']['coordinates'][0][1] <= ul[1],
-                                                                     dw['geometry']['coordinates'][0][1] >= lr[1]])
-                                                                ])]
-                treesPlot   = [tree for tree in self.treeData if all([tree['geometry']['coordinates'][0] >= ul[0],
-                                                                      tree['geometry']['coordinates'][0] <= lr[0],
-                                                                      tree['geometry']['coordinates'][1] <= ul[1],
-                                                                      tree['geometry']['coordinates'][1] >= lr[1]])]
+                dwPlot = [dw for dw in self.dwData if any([all([dw['geometry']['coordinates'][0][0] >= ul[0],
+                                                                dw['geometry']['coordinates'][0][0] <= lr[0],
+                                                                dw['geometry']['coordinates'][0][1] <= ul[1],
+                                                                dw['geometry']['coordinates'][0][1] >= lr[1]]),
+                                                           all([dw['geometry']['coordinates'][0][0] >= ul[0],
+                                                                dw['geometry']['coordinates'][0][0] <= lr[0],
+                                                                dw['geometry']['coordinates'][0][1] <= ul[1],
+                                                                dw['geometry']['coordinates'][0][1] >= lr[1]])
+                                                           ])]
+                treesPlot = [tree for tree in self.treeData if all([tree['geometry']['coordinates'][0] >= ul[0],
+                                                                    tree['geometry']['coordinates'][0] <= lr[0],
+                                                                    tree['geometry']['coordinates'][1] <= ul[1],
+                                                                    tree['geometry']['coordinates'][1] >= lr[1]])]
 
                 plot4blend = self.path['blender'].joinpath(f'plot_{plot:03d}')
                 plot4blend.mkdir(parents=True, exist_ok=True)
 
-                dfTree  = self.convert2pd(treesPlot,[E,N])
-                dfTree  = self.cleanDf(dfTree)
+                dfTree = self.convert2pd(treesPlot, [E, N])
+                dfTree = self.cleanDf(dfTree)
                 dfTree.to_csv(plot4blend.joinpath('tree.csv'))
 
-                dfDw    = self.convert2pd(dwPlot,[E,N])
-                dfDw    = self.cleanDf(dfDw)
+                dfDw = self.convert2pd(dwPlot, [E, N])
+                dfDw = self.cleanDf(dfDw)
                 dfDw.to_csv(plot4blend.joinpath('dw.csv'))
 
-                self.plots[f'{plot:03d}']               = dict()
+                self.plots[f'{plot:03d}'] = dict()
+                self.plots[f'{plot:03d}']['heliosPath'] = self.path['helios'].joinpath(f'plot_{plot:03d}')
+                self.plots[f'{plot:03d}']['blenderPath']= self.path['blender'].joinpath(f'plot_{plot:03d}')
                 self.plots[f'{plot:03d}']['plotName']   = f'Plot_{plot:03d}'
                 self.plots[f'{plot:03d}']['dwPath']     = plot4blend.joinpath('dw.csv')
                 self.plots[f'{plot:03d}']['treePath']   = plot4blend.joinpath('tree.csv')
                 self.plots[f'{plot:03d}']['dwData']     = dfDw
                 self.plots[f'{plot:03d}']['treeData']   = dfTree
                 self.plots[f'{plot:03d}']['center']     = self.plotPositions[plot]
-                self.plots[f'{plot:03d}']['scanLine']   = np.vstack([[s[0]+E,s[1]+N] for s in
+                self.plots[f'{plot:03d}']['scanLine']   = np.vstack([[s[0] + E, s[1] + N] for s in
                                                                      self.scanPatterns[scanPattern]['scanLine']])
+
+                self.plots[f'{plot:03d}']['blenderPath'].mkdir(parents=True, exist_ok=True)
+                self.plots[f'{plot:03d}']['heliosPath'].mkdir(parents=True, exist_ok=True)
 
         def convert2pd(self,geoJSONdat,offset):
             pointCollector  = []
@@ -323,12 +470,17 @@ class GeoJSON2SimCloud:
                                  groundPath='H:\\Blender\\buildingBlocks\\ground.obj',
                                  dwPath='H:\\Blender\\buildingBlocks\\layingCylinder.obj',
                                  treePath='H:\\Blender\\buildingBlocks\\standingCylinder.obj',
+                                 grassPath='H:\\Blender\\Grass\\grass.obj',
+                                 lowVegPath='H:\\Blender\\LowVeg\\lowVeg.004.obj'
                             ):
 
             for plot in self.plots.keys():
                 print(f'{self.plots[plot]["plotName"]}:\n--------------\nCreating DeadWood- and Trees-Objects with Blender\n')
-                self.plots[plot]['dw4Helios']   = Path(str(self.plots[plot]['dwPath'])[:-4]+'.obj')
-                self.plots[plot]['tree4Helios'] = Path(str(self.plots[plot]['treePath'])[:-4] + '.obj')
+                self.plots[plot]['ground4Helios']   = Path(groundPath)
+                self.plots[plot]['grass4Helios']    = Path(grassPath)
+                self.plots[plot]['lowVeg4Helios']   = Path(lowVegPath)
+                self.plots[plot]['dw4Helios']       = Path(str(self.plots[plot]['dwPath'])[:-4]+'.obj')
+                self.plots[plot]['tree4Helios']     = Path(str(self.plots[plot]['treePath'])[:-4] + '.obj')
                 subprocess.run([f'{blenderExePath}',f'-b',f'--python',f'{blenderScriptPath}',f'{groundPath}',
                                 f'{dwPath}',f'{treePath}',f'{str(self.plots[plot]["dwPath"])}',
                                 f'{str(self.plots[plot]["treePath"])}',f'{str(self.plots[plot]["dw4Helios"])}',
@@ -387,8 +539,10 @@ class GeoJSON2SimCloud:
 test = GeoJSON2SimCloud(wdir='H:\\Simulation')
 
 test.newProject(treePath=treePath,dwPath=dwPath,plotPath=txtPath)
-test.currentProject.preparePlots()
+test.currentProject.preparePlots(singlePlot=0)
 test.currentProject.blenderRunPlots()
+test.currentProject.writeXml4Helios()
+test.currentProject.runHelios()
 test.currentProject.writeMetaFile()
 
 

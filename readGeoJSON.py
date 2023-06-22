@@ -162,15 +162,22 @@ class GeoJSON2SimCloud:
                                                     [self.scanPatterns['LFI']['extend'][0][1],
                                                      self.scanPatterns['LFI']['extend'][1][1]],
                                                     [0, 0]]
-        def createLeg4HeliosMLS(self,rpmRoll=26,vWalk=1.0):
+        def createLeg4HeliosMLS(self,rpmRoll=26,vWalk=1.0,turnTime=0.25):
             self.scanPatterns['LFI']['legs'] = ['#TIME_COLUMN: 0',
                                                 '#HEADER: "t", "roll", "pitch", "yaw", "x", "y", "z"']
             t       = 0
             roll    = 0
+            pitch   = 0
+            yaw     = 0
+            x       = 0
+            y       = 0
+            z       = 0
 
             for i in range(len(self.scanPatterns['LFI']['scanLine'])):
-                pos = self.scanPatterns['LFI']['scanLine'][i]
+
                 if i == 0:
+                    # starting point on Tripod (pitch = 0)
+                    pos     = self.scanPatterns['LFI']['scanLine'][i]
                     t       = 0
                     roll    = 0
                     pitch   = 0
@@ -178,8 +185,27 @@ class GeoJSON2SimCloud:
                     x       = pos[0]
                     y       = pos[1]
                     z       = 1.2
-                else:
-                    posOld = self.scanPatterns['LFI']['scanLine'][i-1]
+                    self.scanPatterns['LFI']['legs'].append(f'{t}, {pitch}, {roll}, {yaw}, {x}, {y}, {z}')
+
+                    # turning towards next pos:
+                    posNext = self.scanPatterns['LFI']['scanLine'][i + 1]
+                    dx      = posNext[0]-pos[0]
+                    dy      = posNext[1]-pos[1]
+                    if dy == 0 and dx < 0:
+                        yaw = 270
+                    elif dy == 0 and dx > 0:
+                        yaw = 90
+                    else:
+                        yaw = np.degrees(np.arctan(dx/dy))
+                        if yaw < 0:
+                            yaw = 360 + yaw
+                    t       += turnTime
+                    self.scanPatterns['LFI']['legs'].append(f'{t}, {pitch}, {roll}, {yaw}, {x}, {y}, {z}')
+
+                elif i == len(self.scanPatterns['LFI']['scanLine']):
+                    # arriving at intermediate pos:
+                    pos     = self.scanPatterns['LFI']['scanLine'][i]
+                    posOld  = self.scanPatterns['LFI']['scanLine'][i-1]
                     dx      = posOld[0]-pos[0]
                     dy      = posOld[1]-pos[1]
                     l       = (dx**2 + dy**2)**(1/2)
@@ -188,11 +214,44 @@ class GeoJSON2SimCloud:
                     t       += dt
                     roll    += dRoll
                     pitch   = 0
-                    yaw     = 0
+                    yaw     += 0
                     x       = pos[0]
                     y       = pos[1]
                     z       = 1.2
-                self.scanPatterns['LFI']['legs'].append(f'{t}, {pitch}, {roll}, {yaw}, {x}, {y}, {z}')
+                    self.scanPatterns['LFI']['legs'].append(f'{t}, {pitch}, {roll}, {yaw}, {x}, {y}, {z}')
+
+                else:
+                    # arriving at intermediate pos:
+                    pos     = self.scanPatterns['LFI']['scanLine'][i]
+                    posOld  = self.scanPatterns['LFI']['scanLine'][i-1]
+                    dx      = posOld[0]-pos[0]
+                    dy      = posOld[1]-pos[1]
+                    l       = (dx**2 + dy**2)**(1/2)
+                    dt      = l/vWalk
+                    dRoll   = (360*(rpmRoll/60))*dt
+                    t       += dt
+                    roll    += dRoll
+                    pitch   = 0
+                    yaw     += 0
+                    x       = pos[0]
+                    y       = pos[1]
+                    z       = 1.2
+                    self.scanPatterns['LFI']['legs'].append(f'{t}, {pitch}, {roll}, {yaw}, {x}, {y}, {z}')
+
+                    # turning towards next pos:
+                    posNext = self.scanPatterns['LFI']['scanLine'][i + 1]
+                    dx      = posNext[0]-pos[0]
+                    dy      = posNext[1]-pos[1]
+                    if dy == 0 and dx < 0:
+                        yaw = 270
+                    elif dy == 0 and dx > 0:
+                        yaw = 90
+                    else:
+                        yaw = np.degrees(np.arctan(dx/dy))
+                        if yaw < 0:
+                            yaw = 360 + yaw
+                    t       += turnTime
+                    self.scanPatterns['LFI']['legs'].append(f'{t}, {pitch}, {roll}, {yaw}, {x}, {y}, {z}')
 
             with open(self.path['trajectory'].joinpath('MLS.trj'), mode="wt") as f:
                 for line in self.scanPatterns['LFI']['legs']:
@@ -215,26 +274,33 @@ class GeoJSON2SimCloud:
                 self.plots[plot]['xmlFolder']   = self.plots[plot]['heliosPath'].joinpath('xml/')
                 self.plots[plot]['xmlFolder'].mkdir(parents=True,exist_ok=True)
 
-                surveyXML = [f'<?xml version="1.0" encoding="UTF-8"?>',
-                             f'<document>',
-                             f'\t<scannerSettings id="scaset" active="true" pulseFreq_hz="180000" scanFreq_hz="100"/>',
-                             f'\t<survey name="{self.plots[plot]["plotName"]}" ',
-                             f'\t\tscene="{self.plots[plot]["scenePath"]}#{self.plots[plot]["sceneName"]}" ',
-                             f'\t\tplatform="interpolated" basePlatform="data/platforms.xml#sr22" ',
-                             f'\t\tscanner="{self.plots[plot]["scannerPath"]}#{self.plots[plot]["scanner"]}">',
-                             f'\t\t<leg>',
-                             f'\t\t\t<platformSettings ',
-                             f'\t\t\t\ttrajectory="{self.path["trajectory"].joinpath(trj)}"',
-                             f'\t\t\t\ttIndex="0" xIndex="4" yIndex="5" zIndex="6" ',
-                             f'\t\t\t\trollIndex="2" pitchIndex="1" yawIndex="3"',
-                             f'\t\t\t\tslopeFilterThreshold="0.0" toRadians="true" syncGPSTime="true"',
-                             f'\t\t\t\ttStart="0" tEnd="{self.scanPatterns["LFI"]["legs"][-1].split(",")[0]}" teleportToStart="true"',
-                             f'\t\t\t/>',
-                             f'\t\t\t<scannerSettings template="scaset" trajectoryTimeInterval_s="0.01"/>',
-                             f'\t\t</leg>',
-                             f'\t</survey>',
-                             f'</document>'
-                             ]
+                surveyXML  = [f'<?xml version="1.0" encoding="UTF-8"?>',
+                              f'<document>',
+                              f'\t<scannerSettings id="scaset" active="true" pulseFreq_hz="180000" scanFreq_hz="100"/>',
+                              f'\t<survey name="{self.plots[plot]["plotName"]}" ',
+                              f'\t\tscene="{self.plots[plot]["scenePath"]}#{self.plots[plot]["sceneName"]}" ',
+                              f'\t\tplatform="interpolated" basePlatform="data/platforms.xml#sr22" ',
+                              f'\t\tscanner="{self.plots[plot]["scannerPath"]}#{self.plots[plot]["scanner"]}">'
+                              ]
+
+                for l in range(len(self.scanPatterns["LFI"]["legs"])):
+                    if l > 0:
+                        surveyXML += [f'\t\t<leg>',
+                                      f'\t\t\t<platformSettings ',
+                                      f'\t\t\t\ttrajectory="{self.path["trajectory"].joinpath(trj)}"',
+                                      f'\t\t\t\ttIndex="0" xIndex="4" yIndex="5" zIndex="6" ',
+                                      f'\t\t\t\trollIndex="2" pitchIndex="1" yawIndex="3"',
+                                      f'\t\t\t\tslopeFilterThreshold="0.0" toRadians="true" syncGPSTime="true"',
+                                      f'\t\t\t\ttStart="{self.scanPatterns["LFI"]["legs"][l-1].split(",")[0]}"',
+                                      f'\t\t\t\ttEnd="{self.scanPatterns["LFI"]["legs"][l].split(",")[0]}"',
+                                      f'\t\t\t\tteleportToStart="true"',
+                                      f'\t\t\t/>',
+                                      f'\t\t\t<scannerSettings template="scaset" trajectoryTimeInterval_s="0.01"/>',
+                                      f'\t\t</leg>'
+                                      ]
+
+                surveyXML += [f'\t</survey>',
+                              f'</document>']
 
                 sceneXML = [f'<?xml version="1.0" encoding="UTF-8"?>',
                             f'<document>',
@@ -280,6 +346,7 @@ class GeoJSON2SimCloud:
                                 f'{str(self.plots[plot]["surveyPath"])}',
                                 f'outputPath={str(self.plots[plot]["heliosPath"])}'],
                                cwd='H:/Helios/helios-plusplus-win/')
+
         def loadDwGeoJSON(self):
             with open(self.path['dwData'], 'r') as f:
                 gj = geojson.load(f)

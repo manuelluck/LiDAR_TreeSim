@@ -283,7 +283,7 @@ class GeoJSON2SimCloud:
                     if l > 0:
                         if l == 3:
                             headRotStart = float(self.scanPatterns["LFI"]["legs"][l-1].split(",")[0])*headRotSpeed
-                            headRotStop  = float(self.scanPatterns["LFI"]["legs"][l-1].split(",")[0])*headRotSpeed
+                            headRotStop  = float(self.scanPatterns["LFI"]["legs"][l].split(",")[0])*headRotSpeed
                             surveyXML += [f'\t\t<leg>',
                                           f'\t\t\t<platformSettings ',
                                           f'\t\t\t\ttrajectory="{self.path["trajectory"].joinpath(trj)}"',
@@ -302,6 +302,8 @@ class GeoJSON2SimCloud:
                                           f'\t\t</leg>'
                                           ]
                         else:
+                            headRotStart = float(self.scanPatterns["LFI"]["legs"][l-1].split(",")[0])*headRotSpeed
+                            headRotStop  = float(self.scanPatterns["LFI"]["legs"][l].split(",")[0])*headRotSpeed
                             surveyXML += [f'\t\t<leg>',
                                           f'\t\t\t<platformSettings ',
                                           f'\t\t\t\ttrajectory="{self.path["trajectory"].joinpath(trj)}"',
@@ -309,7 +311,11 @@ class GeoJSON2SimCloud:
                                           f'\t\t\t\ttEnd="{self.scanPatterns["LFI"]["legs"][l].split(",")[0]}"',
                                           f'\t\t\t\tteleportToStart="true"',
                                           f'\t\t\t/>',
-                                          f'\t\t\t<scannerSettings template="scaset" trajectoryTimeInterval_s="0.01"/>',
+                                          f'\t\t\t<scannerSettings template="scaset"',
+                                          f'\t\t\t\theadRotatePerSec_deg="{headRotSpeed}"',
+                                          f'\t\t\t\theadRotateStart_deg="{headRotStart}" ',
+                                          f'\t\t\t\theadRotateStop_deg="{headRotStop}"',
+                                          f'\t\t\t\ttrajectoryTimeInterval_s="0.01"/>',
                                           f'\t\t</leg>'
                                           ]
 
@@ -358,7 +364,7 @@ class GeoJSON2SimCloud:
             for plot in self.plots.keys():
                 subprocess.run(['H:/Helios/helios-plusplus-win/run/helios.exe',
                                 f'{str(self.plots[plot]["surveyPath"])}',
-                                f'outputPath={str(self.plots[plot]["heliosPath"])}'],
+                                f'--lasOutput 1'],
                                cwd='H:/Helios/helios-plusplus-win/')
 
         def loadDwGeoJSON(self):

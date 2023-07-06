@@ -37,7 +37,7 @@ dwPath      = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\dw_2022.GeoJSON'
 treePath    = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\trees_2022.GeoJSON'
 
 # PositionFile:
-txtPath     = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\possiblePlots.txt'
+txtPath     = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\possiblePlots2.txt'
 
 # class:
 class GeoJSON2SimCloud:
@@ -162,7 +162,7 @@ class GeoJSON2SimCloud:
                                                     [self.scanPatterns['LFI']['extend'][0][1],
                                                      self.scanPatterns['LFI']['extend'][1][1]],
                                                     [0, 0]]
-        def createLeg4HeliosMLS(self,rpmRoll=26,vWalk=1.0,turnTime=0.25):
+        def createLeg4HeliosMLS(self,rpmRoll=26,vWalk=1.5,turnTime=0.1):
             self.scanPatterns['LFI']['legs'] = ['#TIME_COLUMN: 0',
                                                 '#HEADER: "t", "pitch", "roll", "yaw", "x", "y", "z"']
             t       = 0
@@ -360,11 +360,11 @@ class GeoJSON2SimCloud:
                     for line in sceneXML:
                         t.write(f'{line}\n')
 
-        def runHelios(self):
+        def runHelios(self,flags=''):
             for plot in self.plots.keys():
                 subprocess.run(['H:/Helios/helios-plusplus-win/run/helios.exe',
                                 f'{str(self.plots[plot]["surveyPath"])}',
-                                f'--lasOutput 1'],
+                                f'{flags}'],
                                cwd='H:/Helios/helios-plusplus-win/')
 
         def loadDwGeoJSON(self):
@@ -388,6 +388,39 @@ class GeoJSON2SimCloud:
             with open(self.path['meta'].joinpath('path.txt'), 'w') as f:
                 for key, value in self.path.items():
                     f.write(f'{key},{value}\n')
+
+        def plotting(self, dw, trees, scanline, figPath='figure.png'):
+            """
+            function - plotting(dw,trees)
+            dw:     geoJSON deadwood / line-file
+            trees:  geoJSon trees   / point-file
+            """
+            scanline = np.vstack(scanline)
+            cmap = cm.get_cmap('terrain')
+            plt.figure()
+            for i in range(len(trees[trees.keys()[0]])):
+                try:
+                    t = trees.iloc[i]
+                    plt.scatter(t['X'], t['Y'],
+                                s=(t['D1'] / max(trees['D1']) * 20),
+                                marker='o',
+                                color=cmap((t['BA'] - 100) / 1000))
+                except:
+                    print(trees.iloc[i])
+            for i in range(len(dw[dw.keys()[0]])):
+                d = dw.iloc[i]
+                plt.plot([d['X0'], d['X1']], [d['Y0'], d['Y1']],
+                         linewidth=(d['D1'] / max(dw['D1']) * 2),
+                         color=cmap((d['BA'] - 100) / 1000))
+
+            plt.plot(scanline[:, 0], scanline[:, 1], marker='.', linestyle='--', color='tan', alpha=0.5)
+            for p in [0, 1, 2, 9, 10]:
+                plt.text(scanline[p, 0], scanline[p, 1] + 2,
+                         f'{scanline[p, 0]}E / {scanline[p, 1]}N',
+                         fontdict={'size': 6},
+                         horizontalalignment='center')
+            plt.axis('off')
+            plt.savefig(figPath, dpi=200)
 
         def preparePlots(self,scanPattern='LFI',singlePlot=None):
             if singlePlot is None:
@@ -440,6 +473,8 @@ class GeoJSON2SimCloud:
 
                     self.plots[f'{plot:03d}']['blenderPath'].mkdir(parents=True, exist_ok=True)
                     self.plots[f'{plot:03d}']['heliosPath'].mkdir(parents=True,exist_ok=True)
+                    self.plotting(dfDw, dfTree, self.plots[f'{plot:03d}']['scanLine'],
+                                  figPath=self.path['png'].joinpath(f'Plot_{plot:03d}.png'))
             else:
                 plot = int(singlePlot)
                 E = self.plotPositions[plot][0]
@@ -479,6 +514,7 @@ class GeoJSON2SimCloud:
                 self.plots[f'{plot:03d}'] = dict()
                 self.plots[f'{plot:03d}']['heliosPath'] = self.path['helios'].joinpath(f'plot_{plot:03d}')
                 self.plots[f'{plot:03d}']['blenderPath']= self.path['blender'].joinpath(f'plot_{plot:03d}')
+
                 self.plots[f'{plot:03d}']['plotName']   = f'Plot_{plot:03d}'
                 self.plots[f'{plot:03d}']['dwPath']     = plot4blend.joinpath('dw.csv')
                 self.plots[f'{plot:03d}']['treePath']   = plot4blend.joinpath('tree.csv')
@@ -490,6 +526,10 @@ class GeoJSON2SimCloud:
 
                 self.plots[f'{plot:03d}']['blenderPath'].mkdir(parents=True, exist_ok=True)
                 self.plots[f'{plot:03d}']['heliosPath'].mkdir(parents=True, exist_ok=True)
+
+                self.plotting(dfDw, dfTree, self.plots[f'{plot:03d}']['scanLine'],
+                              figPath=self.path['png'].joinpath(f'Plot_{plot:03d}.png'))
+
 
         def convert2pd(self,geoJSONdat,offset):
             pointCollector  = []
@@ -590,47 +630,14 @@ class GeoJSON2SimCloud:
         pass
 
 
-    def plotting(self,dw,trees,scanline,figPath='figure.png'):
-        """
-        function - plotting(dw,trees)
-        dw:     geoJSON deadwood / line-file
-        trees:  geoJSon trees   / point-file
-        """
-        cmap = cm.get_cmap('terrain')
-        plt.figure()
-        for i in range(len(trees[trees.keys()[0]])):
-            try:
-                t = trees.iloc[i]
-                plt.scatter(t['X'],t['Y'],
-                            s=(t['D1']/max(trees['D1'])*20),
-                            marker='o',
-                            color=cmap((t['BA']-100)/1000))
-            except:
-                print(trees.iloc[i])
-        for i in range(len(dw[dw.keys()[0]])):
-            d = dw.iloc[i]
-            plt.plot([d['X0'],d['X1']],[d['Y0'],d['Y1']],
-                     linewidth=(d['D1']/max(dw['D1'])*2),
-                     color=cmap((d['BA']-100)/1000))
-
-        plt.plot(scanline[:,0],scanline[:,1],marker='.',linestyle='--',color='tan',alpha=0.5)
-        for p in [0,1,2,9,10]:
-            plt.text(scanline[p,0],scanline[p,1]+2,
-                     f'{scanline[p,0]}E / {scanline[p,1]}N',
-                     fontdict={'size':6},
-                     horizontalalignment='center')
-        plt.axis('off')
-        plt.savefig(figPath,dpi=200)
-
-
 test = GeoJSON2SimCloud(wdir='H:\\Simulation')
 
 test.newProject(treePath=treePath,dwPath=dwPath,plotPath=txtPath)
-test.currentProject.preparePlots(singlePlot=0)
-test.currentProject.blenderRunPlots()
-test.currentProject.writeXml4Helios()
-test.currentProject.runHelios()
-test.currentProject.writeMetaFile()
+test.currentProject.preparePlots()
+#test.currentProject.blenderRunPlots()
+#test.currentProject.writeXml4Helios()
+#test.currentProject.runHelios()
+#test.currentProject.writeMetaFile()
 
 
 

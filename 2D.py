@@ -21,6 +21,8 @@ zBins   = np.linspace(start=ext[0][2],stop=ext[1][2],num=int((abs(ext[0][2])+abs
 
 # Prepare matrix
 mat     = np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1))
+mat     = np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1))
+mat     = np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1))
 
 # Fill matrix
 for ix,x in enumerate(xBins):
@@ -35,9 +37,8 @@ for ix,x in enumerate(xBins):
                         mat[ix-1,iy-1,iz-1] = len(zPoints.x)
 #
 plt.figure()
-for i in range(len(mat[0,0,:])):
-    plt.imshow(mat[:,:,i])
-    plt.pause(0.1)
+plt.imshow(mat[:,:,50])
+
 
 
 
@@ -46,7 +47,7 @@ def reshape_2D_2_1D(arr):
     m,n = np.shape(arr)
     return np.reshape(arr,m*n)
 
-max_m = np.argmax(mat[:,:,0:25],axis=2)
+max_m = np.argmax(mat[:,:,:],axis=2)
 
 
 plt.figure()
@@ -65,51 +66,53 @@ for i in range(len(mat[0,0,:])):
     matMax[:,:,i] = np.divide(mat[:,:,i],np.max(mat,axis=2))
 
 plt.figure()
-plt.imshow(mat[:,:,h]*(max_m == h),vmin=100,vmax=1000)
+plt.imshow(mat[:,:,h]*(max_m == h),vmin=10,vmax=200)
 
 def plotPolyMats(polyMat,suptitle=''):
     _,_,p = np.shape(polyMat)
 
-    f, ax = plt.subplots(1, p, sharey=True)
-    f.set_figheight(8)
+    f, ax = plt.subplots(1, p, sharey=True, sharex=True)
+    f.set_figheight(4)
     f.set_figwidth(15)
     plt.suptitle(suptitle,fontsize=10)
     for i in range(p):
         ax[i].imshow(polyMat[:,:,i])
-        ax[i].set_title(f'Polygonal Order {i}',fontsize=8)
+        ax[i].set_title(f'Polynomial Coefficient: {i}',fontsize=8)
         ax[i].axis('off')
 
 
 
 
-hl=h-1
+hl=h-2
 hu=h+10
-n = 5
+n = 3
 polyMat     = np.zeros((np.shape(mat)[0],np.shape(mat)[1],n+1))
+polyMatBin  = np.zeros((np.shape(mat)[0],np.shape(mat)[1],n+1))
 polyMatSum  = np.zeros((np.shape(mat)[0],np.shape(mat)[1],n+1))
 polyMatMax  = np.zeros((np.shape(mat)[0],np.shape(mat)[1],n+1))
 
 x = [x*0.25 for x in range(len(mat[0,0,hl:hu]))]
 for i in range(np.shape(mat)[0]):
     for j in range(np.shape(mat)[1]):
-        polyMat[i,j,:]      = np.polyfit(x,matBin[i,j,hl:hu],n)
+        polyMat[i, j, :]    = np.polyfit(x, mat[i, j, hl:hu], n)
+        polyMatBin[i,j,:]   = np.polyfit(x,matBin[i,j,hl:hu],n)
         polyMatSum[i, j, :] = np.polyfit(x, matSum[i, j, hl:hu], n)
         polyMatMax[i, j, :] = np.polyfit(x, matMax[i, j, hl:hu], n)
 
-
-plotPolyMats(polyMat,suptitle='Count')
-plotPolyMats(polyMatMax,suptitle='Norm Max')
-plotPolyMats(polyMatSum,suptitle='Norm Sum')
+plotPolyMats(polyMat,suptitle=f'Raw (Polynom Degree {n})')
+plotPolyMats(polyMatBin,suptitle=f'Binary (Polynom Degree {n})')
+plotPolyMats(polyMatMax,suptitle=f'Norm Max (Polynom Degree {n})')
+plotPolyMats(polyMatSum,suptitle=f'Norm Sum (Polynom Degree {n})')
 
 plt.figure()
 ax1 = plt.subplot(121)
 ax2 = plt.subplot(122)
-for i in range(100):
+for i in range(20):
     ix,iy = [int(np.floor(np.random.rand(1)*np.shape(matBin)[0])),
              int(np.floor(np.random.rand(1)*np.shape(matBin)[1]))]
-    ax1.plot(matBin[ix,iy,hl:hu],x)
+    ax1.plot(matSum[ix,iy,hl:hu],x)
 
-    p = np.poly1d(np.polyfit(x,matBin[ix,iy,hl:hu], n))
+    p = np.poly1d(np.polyfit(x,matSum[ix,iy,hl:hu], n))
     ax2.plot(p(x),x,'--')
 
 for i in range(np.shape(mat)[0]):

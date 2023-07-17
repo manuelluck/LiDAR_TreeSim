@@ -12,17 +12,25 @@ binSize = 0.1
 
 # Get the point ext
 points  = inFile.points
-ext     = [np.floor(np.min(inFile.xyz,axis=0)/5)*5,np.ceil(np.max(inFile.xyz,axis=0)/5)*5]
+points = points[points.z < 2.5]
 
 # Get bins
-xBins   = np.linspace(start=ext[0][0],stop=ext[1][0],num=int((abs(ext[0][0])+abs(ext[1][0]))/binSize))
-yBins   = np.linspace(start=ext[0][1],stop=ext[1][1],num=int((abs(ext[0][1])+abs(ext[1][1]))/binSize))
-zBins   = np.linspace(start=ext[0][2],stop=ext[1][2],num=int((abs(ext[0][2])+abs(ext[1][2]))/binSize))
+xBins   = np.linspace(start=np.floor(min(points.x)),stop=np.ceil(max(points.x)),num=int((abs(np.floor(min(points.x)))+
+                                                                                         abs(np.ceil(max(points.x))))/
+                                                                                        binSize))
+yBins   = np.linspace(start=np.floor(min(points.y)),stop=np.ceil(max(points.y)),num=int((abs(np.floor(min(points.y)))+
+                                                                                         abs(np.ceil(max(points.y))))/
+                                                                                        binSize))
+zBins   = np.linspace(start=np.floor(min(points.z)),stop=np.ceil(max(points.z)),num=int((abs(np.floor(min(points.z)))+
+                                                                                         abs(np.ceil(max(points.z))))/
+                                                                                        binSize))
 
 # Prepare matrix
-mat     = np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1))
-mat     = np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1))
-mat     = np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1))
+dat = {'std x':np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1)),
+       'std y':np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1)),
+       'std z':np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1)),
+       'std xyz':np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1)),
+       'count':np.zeros((len(xBins)-1,len(yBins)-1,len(zBins)-1)),}
 
 # Fill matrix
 for ix,x in enumerate(xBins):
@@ -34,10 +42,17 @@ for ix,x in enumerate(xBins):
                 for iz,z in enumerate(zBins):
                     if iz != 0:
                         zPoints = yPoints[(yPoints.z > zBins[iz - 1]) * (yPoints.z < zBins[iz])]
-                        mat[ix-1,iy-1,iz-1] = len(zPoints.x)
-#
-plt.figure()
-plt.imshow(mat[:,:,50])
+                        dat['std x'][ix-1,iy-1,iz-1]    = np.nanstd(zPoints.x)
+                        dat['std y'][ix-1,iy-1,iz-1]    = np.nanstd(zPoints.y)
+                        dat['std z'][ix-1,iy-1,iz-1]    = np.nanstd(zPoints.z)
+                        dat['std xyz'][ix-1,iy-1,iz-1]  = (dat['std x'][ix-1,iy-1,iz-1]+
+                                                           dat['std y'][ix-1,iy-1,iz-1]+
+                                                           dat['std z'][ix-1,iy-1,iz-1])
+                        dat['count'][ix-1,iy-1,iz-1]    = len(zPoints.z)
+
+
+mat = dat['count']
+
 
 
 
@@ -55,6 +70,15 @@ plt.imshow(max_m)
 
 h = st.mode(reshape_2D_2_1D(max_m)).mode
 
+#
+f, ax = plt.subplots(1, len(dat.keys()), sharey=True, sharex=True)
+f.set_figheight(4)
+f.set_figwidth(len(dat.keys())*3)
+plt.suptitle('Voxel Point Distribution', fontsize=10)
+for i,key in enumerate(dat.keys()):
+    ax[i].imshow(dat[key][:,:,h])
+    ax[i].set_title(f'{key}', fontsize=8)
+    ax[i].axis('off')
 
 matBin = np.zeros(np.shape(mat))
 matBin[mat>0] = 1
@@ -83,6 +107,8 @@ def plotPolyMats(polyMat,suptitle=''):
 
 
 
+
+
 hl=h-2
 hu=h+10
 n = 3
@@ -90,19 +116,33 @@ polyMat     = np.zeros((np.shape(mat)[0],np.shape(mat)[1],n+1))
 polyMatBin  = np.zeros((np.shape(mat)[0],np.shape(mat)[1],n+1))
 polyMatSum  = np.zeros((np.shape(mat)[0],np.shape(mat)[1],n+1))
 polyMatMax  = np.zeros((np.shape(mat)[0],np.shape(mat)[1],n+1))
+polyMatStd  = np.zeros((np.shape(mat)[0],np.shape(mat)[1],n+1))
+polyMatStdZ = np.zeros((np.shape(mat)[0],np.shape(mat)[1],n+1))
 
-x = [x*0.25 for x in range(len(mat[0,0,hl:hu]))]
+def polyfitPixel(pixel,zStep=0.25,polyOrder=3,removeNaN=True):
+    steps = [s*zStep for s in range(len(pixel))]
+    if removeNaN:
+        steps   = steps[~np.isnan(pixel)]
+        pixel   = pixel[~np.isnan(pixel)]
+        return np.polyfit(steps,pixel)
+    else:
+        return np.polyfit(steps,pixel)
+
+
 for i in range(np.shape(mat)[0]):
     for j in range(np.shape(mat)[1]):
-        polyMat[i, j, :]    = np.polyfit(x, mat[i, j, hl:hu], n)
-        polyMatBin[i,j,:]   = np.polyfit(x,matBin[i,j,hl:hu],n)
-        polyMatSum[i, j, :] = np.polyfit(x, matSum[i, j, hl:hu], n)
-        polyMatMax[i, j, :] = np.polyfit(x, matMax[i, j, hl:hu], n)
+        # polyMat[i, j, :]      = np.polyfit(x, mat[i, j, hl:hu], n)
+        # polyMatBin[i,j,:]     = np.polyfit(x,matBin[i,j,hl:hu],n)
+        # polyMatSum[i, j, :]   = np.polyfit(x, matSum[i, j, hl:hu], n)
+        # polyMatMax[i, j, :]   = np.polyfit(x, matMax[i, j, hl:hu], n)
+        polyMatStd[i, j, :]     = polyfitPixel(dat['std xyz'][i,j,:])
 
-plotPolyMats(polyMat,suptitle=f'Raw (Polynom Degree {n})')
-plotPolyMats(polyMatBin,suptitle=f'Binary (Polynom Degree {n})')
-plotPolyMats(polyMatMax,suptitle=f'Norm Max (Polynom Degree {n})')
-plotPolyMats(polyMatSum,suptitle=f'Norm Sum (Polynom Degree {n})')
+# plotPolyMats(polyMat,suptitle=f'Raw (Polynom Degree {n})')
+# plotPolyMats(polyMatBin,suptitle=f'Binary (Polynom Degree {n})')
+# plotPolyMats(polyMatMax,suptitle=f'Norm Max (Polynom Degree {n})')
+# plotPolyMats(polyMatSum,suptitle=f'Norm Sum (Polynom Degree {n})')
+plotPolyMats(polyMatStd,suptitle=f'Standard Deviation Z (Polynom Degree {n})')
+
 
 plt.figure()
 ax1 = plt.subplot(121)

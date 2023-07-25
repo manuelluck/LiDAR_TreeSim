@@ -633,7 +633,7 @@ class GeoJSON2SimCloud:
 test = GeoJSON2SimCloud(wdir='H:\\Simulation')
 
 test.newProject(treePath=treePath,dwPath=dwPath,plotPath=txtPath)
-test.currentProject.preparePlots()
+test.currentProject.preparePlots(singlePlot=0)
 #test.currentProject.blenderRunPlots()
 #test.currentProject.writeXml4Helios()
 #test.currentProject.runHelios()

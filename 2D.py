@@ -153,8 +153,6 @@ def prepareData(pointCloudFile, referenceDataFile,
                                      for i in range(np.shape(dat['count'])[2])])
 
     dat['groundlevel'] = St.mode(reshape_2D_2_1D(np.argmax(dat['count'][:, :, :], axis=2))).mode
-    dat['lowerthreshold'] = dat['groundlevel'] - 1
-    dat['upperthreshold'] = dat['groundlevel'] + 8
     dat['polyOrder'] = polyOrder
     dat['binSize'] = binSize
 
@@ -176,21 +174,21 @@ def plotImgDatOnGroundLevel(dat):
 [dat,var] = prepareData(pointCloudFile="C:\\Users\\luckmanu\\Desktop\\"
                            "2023-06-29_09-45-16_a0_006_100pct_height_world_clip2Traj_ground_heb_norm.laz",
                         referenceDataFile='H:\\Simulation\\Project_003\\Blender\\plot_000\\dw.csv',
-                        binSize=0.5,
+                        binSize=0.25,
                         polyOrder=3,
-                        extend={'x': [-10, 10],
-                                'y': [-10, 10],
+                        extend={'x': [-20, 20],
+                                'y': [-20, 20],
                                 'z': [-0.2, 5]}
                         )
 
 plotImgDatOnGroundLevel(dat)
 
 plotPolyMats(getPolyCoef(dat['countNormSum'],
-                         hl=dat['lowerthreshold'],
-                         hu=dat['upperthreshold'],
+                         hl=dat['groundlevel'] - 1,
+                         hu=dat['groundlevel'] + 8,
                          removeNaN=True,
                          polyOrder=dat['polyOrder']),
-             suptitle=f'PC3 Std in Voxels\n(Polynom Degree {dat["polyOrder"]})')
+             suptitle=f'countNormSum Std in Voxels\n(Polynom Degree {dat["polyOrder"]})')
 
 
 plotPolyLines(dat['countNormSum'],polyOrder=dat['polyOrder'],n=50)

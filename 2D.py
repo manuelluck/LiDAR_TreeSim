@@ -152,9 +152,9 @@ def prepareData(pointCloudFile, referenceDataFile,
     dat['countNormSum'] = np.dstack([dat['count'][:, :, i] / np.nanmax(dat['count'], axis=2)
                                      for i in range(np.shape(dat['count'])[2])])
 
-    dat['groundlevel'] = St.mode(reshape_2D_2_1D(np.argmax(dat['count'][:, :, :], axis=2))).mode
-    dat['polyOrder'] = polyOrder
-    dat['binSize'] = binSize
+    dat['groundLevel']  = St.mode(reshape_2D_2_1D(np.argmax(dat['count'][:, :, :], axis=2))).mode
+    dat['polyOrder']    = polyOrder
+    dat['binSize']      = binSize
 
     return dat, var
 
@@ -189,7 +189,6 @@ plotPolyMats(getPolyCoef(dat['countNormSum'],
                          removeNaN=True,
                          polyOrder=dat['polyOrder']),
              suptitle=f'countNormSum Std in Voxels\n(Polynom Degree {dat["polyOrder"]})')
-
 
 plotPolyLines(dat['countNormSum'],polyOrder=dat['polyOrder'],n=50)
 

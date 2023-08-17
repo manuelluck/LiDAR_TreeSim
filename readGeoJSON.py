@@ -253,7 +253,7 @@ class GeoJSON2SimCloud:
                     f.write(f'{line}\n')
 
         def writeXml4Helios(self,trj='MLS.trj',scannerPath='data/scanners_tls.xml',
-                            scannerName='vlp16',headRotSpeed = 3600):
+                            scannerName='vlp16',headRotSpeed = 3600,pulseFreq=180000):
             for plot in self.plots.keys():
                 groundObj   = str(self.plots[plot]['ground4Helios'])
                 grassObj    = str(self.plots[plot]['grass4Helios'])
@@ -272,7 +272,7 @@ class GeoJSON2SimCloud:
 
                 surveyXML  = [f'<?xml version="1.0" encoding="UTF-8"?>',
                               f'<document>',
-                              f'\t<scannerSettings id="scaset" active="true" pulseFreq_hz="180000" scanFreq_hz="100"/>',
+                              f'\t<scannerSettings id="scaset" active="true" pulseFreq_hz="{pulseFreq}" scanFreq_hz="100"/>',
                               f'\t<survey name="{self.plots[plot]["plotName"]}" ',
                               f'\t\tscene="{self.plots[plot]["scenePath"]}#{self.plots[plot]["sceneName"]}" ',
                               f'\t\tplatform="interpolated" basePlatform="data/platforms.xml#sr22" ',
@@ -634,10 +634,10 @@ test = GeoJSON2SimCloud(wdir='H:\\Simulation')
 
 test.newProject(treePath=treePath,dwPath=dwPath,plotPath=txtPath)
 test.currentProject.preparePlots(singlePlot=0)
-#test.currentProject.blenderRunPlots()
-#test.currentProject.writeXml4Helios()
-#test.currentProject.runHelios()
-#test.currentProject.writeMetaFile()
+test.currentProject.blenderRunPlots()
+test.currentProject.writeXml4Helios(pulseFreq=18000)
+test.currentProject.runHelios()
+test.currentProject.writeMetaFile()
 
 
 

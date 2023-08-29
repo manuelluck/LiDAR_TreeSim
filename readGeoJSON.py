@@ -41,8 +41,9 @@ txtPath     = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\possiblePlots2.txt
 
 # class:
 class GeoJSON2SimCloud:
-    def __init__(self, wdir: str = '',allowFolderCreation=False):
+    def __init__(self, wdir: str = '',heliosMain: str = 'H:/Helios/helios-plusplus-win/',allowFolderCreation=False):
         self.path = dict()
+        self.path['helios'] = heliosMain
         # set up working directory
         try:
             if wdir == '':
@@ -76,7 +77,8 @@ class GeoJSON2SimCloud:
         self.currentProject = None
 
     class Project:
-        def __init__(self,projectNr,wdir,trees,dw,plots):
+        def __init__(self,projectNr,wdir,trees,dw,plots,main):
+            self.main           = main
             self.dwData         = None
             self.treeData       = None
             self.plotPositions  = []
@@ -261,13 +263,13 @@ class GeoJSON2SimCloud:
                 dwObj       = str(self.plots[plot]['dw4Helios'])
                 treeObj     = str(self.plots[plot]['tree4Helios'])
 
-                self.plots[plot]['scannerPath'] = scannerPath
-                self.plots[plot]['scanner']     = scannerName
-                self.plots[plot]['scenePath']   = self.plots[plot]['heliosPath'].joinpath(f'xml/scene_{plot}.xml')
-                self.plots[plot]['sceneName']   = f'scene_{plot}'
-                self.plots[plot]['surveyPath']  = self.plots[plot]['heliosPath'].joinpath(
+                self.plots[plot]['scannerPath']     = scannerPath
+                self.plots[plot]['scanner']         = scannerName
+                self.plots[plot]['scenePath']       = self.plots[plot]['heliosPath'].joinpath(f'xml/scene_{plot}.xml')
+                self.plots[plot]['sceneName']       = f'scene_{plot}'
+                self.plots[plot]['surveyPath']      = self.plots[plot]['heliosPath'].joinpath(
                                                                         f'xml/{self.plots[plot]["plotName"]}.xml')
-                self.plots[plot]['xmlFolder']   = self.plots[plot]['heliosPath'].joinpath('xml/')
+                self.plots[plot]['xmlFolder']       = self.plots[plot]['heliosPath'].joinpath('xml/')
                 self.plots[plot]['xmlFolder'].mkdir(parents=True,exist_ok=True)
 
                 surveyXML  = [f'<?xml version="1.0" encoding="UTF-8"?>',
@@ -362,10 +364,35 @@ class GeoJSON2SimCloud:
 
         def runHelios(self,flags=''):
             for plot in self.plots.keys():
-                subprocess.run(['H:/Helios/helios-plusplus-win/run/helios.exe',
+
+                subprocess.run([f'{self.main.path["helios"]}run/helios.exe',
                                 f'{str(self.plots[plot]["surveyPath"])}',
                                 f'{flags}'],
-                               cwd='H:/Helios/helios-plusplus-win/')
+                               cwd=self.main.path["helios"])
+
+        def combineHeliosLegs(self,removeLegs=True):
+            for plot in self.plots.keys():
+                self.plots[plot]['heliosOutputDir'] = self.plots[plot]['heliosPath'].joinpath('output/')
+                self.plots[plot]['heliosOutputDir'].mkdir(parents=True,exist_ok=True)
+
+                folders = [os.path.join(f'{self.main.path["helios"]}output', entry) for entry in os.listdir(f'{self.main.path["helios"]}output')
+                           if os.path.isdir(os.path.join(f'{self.main.path["helios"]}output', entry))]
+                for folder in folders:
+                    if plot in folder:
+                        subFolders = [os.path.join(f'{folder}', entry) for entry in os.listdir(f'{folder}')
+                                      if os.path.isdir(os.path.join(f'{folder}', entry))]
+                        for subFolder in subFolders:
+                            #trajFiles   = [file for file in os.listdir(subFolder) if file.endswith('.txt')]
+                            xyzFiles    = [file for file in os.listdir(subFolder) if file.endswith('.xyz')]
+
+                            for xyzFile in xyzFiles:
+
+                                with open(xyzFile,'r') as f:
+                                    with open(f'{self.plots[plot]["heliosOutputDir"].joinpath(self.plots[plot]["sceneName"])}.xyz' , "a") as w:
+                                        for line in f:
+                                            x,y,z,_,_,_,_,_,label,_,_ = line.split()
+                                            w.write(f"{x} {y} {z} {label}\n")
+                            os.rmdir(subFolder)
 
         def loadDwGeoJSON(self):
             with open(self.path['dwData'], 'r') as f:
@@ -623,17 +650,18 @@ class GeoJSON2SimCloud:
                                            wdir=self.path['wdir'],
                                            trees=treePath,
                                            dw=dwPath,
-                                           plots=plotPath
+                                           plots=plotPath,
+                                           main=self
                                           )
 
     def loadProject(self,metaFilePath):
         pass
 
 
-test = GeoJSON2SimCloud(wdir='H:\\Simulation')
+test = GeoJSON2SimCloud(wdir='D:\\Simulation')
 
 test.newProject(treePath=treePath,dwPath=dwPath,plotPath=txtPath)
-test.currentProject.preparePlots(singlePlot=0)
+test.currentProject.preparePlots()
 test.currentProject.blenderRunPlots()
 test.currentProject.writeXml4Helios(pulseFreq=18000)
 test.currentProject.runHelios()

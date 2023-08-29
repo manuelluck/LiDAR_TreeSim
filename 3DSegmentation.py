@@ -26,6 +26,8 @@ if loadNew:
                            inFile[p].points.array[1]*inFile.header.y_scale+inFile.header.y_offset,
                            inFile[p].points.array[2]*inFile.header.z_scale+inFile.header.z_offset])
             labels.append(inFile[p].points.array[11])
+
+            #getattr(inFile, header)
     points = np.vstack(points)
 
     np.save(pointsFile,points)
@@ -38,5 +40,6 @@ else:
 
 fig, axs = plt.subplots(1,len(np.unique(labels)))
 for idx,label in enumerate(np.unique(labels)):
-    axs[idx].scatter(points[labels==label,0],points[labels==label,1])
+    axs[idx].scatter(points[labels==label,0],points[labels==label,1],s=0.1)
 
+fig.show()

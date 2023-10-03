@@ -24,21 +24,6 @@ from reportlab.lib.enums import TA_CENTER
 pdfmetrics.registerFont(TTFont('Calibri-Light', 'calibril.ttf'))
 pdfmetrics.registerFont(TTFont('Times-Roman', 'times.ttf'))
 
-
-# output Folders Variables
-imageFolder = 'H:\\ForestSimulation\\PythonFigures\\'
-pdfFolder   = 'H:\\ForestSimulation\\PythonPDF\\'
-
-dwFolder   = 'H:\\Blender\\csv4blender\\'
-treeFolder = 'H:\\Blender\\csv4blender\\'
-
-# DataFiles:
-dwPath      = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\dw_2022.GeoJSON'
-treePath    = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\trees_2022.GeoJSON'
-
-# PositionFile:
-txtPath     = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\possiblePlots2.txt'
-
 # class:
 class GeoJSON2SimCloud:
     def __init__(self, wdir: str = '',heliosMain: str = 'H:/Helios/helios-plusplus-win/',allowFolderCreation=False):
@@ -364,35 +349,69 @@ class GeoJSON2SimCloud:
 
         def runHelios(self,flags=''):
             for plot in self.plots.keys():
-
                 subprocess.run([f'{self.main.path["helios"]}run/helios.exe',
                                 f'{str(self.plots[plot]["surveyPath"])}',
                                 f'{flags}'],
                                cwd=self.main.path["helios"])
 
-        def combineHeliosLegs(self,removeLegs=True):
-            for plot in self.plots.keys():
-                self.plots[plot]['heliosOutputDir'] = self.plots[plot]['heliosPath'].joinpath('output/')
-                self.plots[plot]['heliosOutputDir'].mkdir(parents=True,exist_ok=True)
+                self.combineHeliosLegs(plot)
 
-                folders = [os.path.join(f'{self.main.path["helios"]}output', entry) for entry in os.listdir(f'{self.main.path["helios"]}output')
-                           if os.path.isdir(os.path.join(f'{self.main.path["helios"]}output', entry))]
-                for folder in folders:
-                    if plot in folder:
-                        subFolders = [os.path.join(f'{folder}', entry) for entry in os.listdir(f'{folder}')
-                                      if os.path.isdir(os.path.join(f'{folder}', entry))]
-                        for subFolder in subFolders:
-                            #trajFiles   = [file for file in os.listdir(subFolder) if file.endswith('.txt')]
-                            xyzFiles    = [file for file in os.listdir(subFolder) if file.endswith('.xyz')]
+        def combineHeliosLegs(self,plot,removeLegs=True,split4training=True,center=(0,0),extend=(25,25)):
+            def deleteSubfolderAndFiles(folderPath):
+                for entry in os.listdir(folderPath):
+                    if os.path.isdir(os.path.join(folderPath,entry)):
+                        deleteSubfolderAndFiles(os.path.join(folderPath,entry))
+                        os.rmdir(os.path.join(folderPath,entry))
+                    else:
+                        os.remove(os.path.join(folderPath,entry))
 
-                            for xyzFile in xyzFiles:
+            self.plots[plot]['heliosOutputDir'] = self.plots[plot]['heliosPath'].joinpath('output/')
+            self.plots[plot]['heliosOutputDir'].mkdir(parents=True,exist_ok=True)
 
-                                with open(xyzFile,'r') as f:
+            folders = [os.path.join(f'{self.main.path["helios"]}output', entry) for entry in os.listdir(f'{self.main.path["helios"]}output')
+                       if os.path.isdir(os.path.join(f'{self.main.path["helios"]}output', entry))]
+            for folder in folders:
+                if plot in folder:
+                    subFolders  = [os.path.join(f'{folder}', entry) for entry in os.listdir(f'{folder}')
+                                   if os.path.isdir(os.path.join(f'{folder}', entry))]
+                    for subFolder in subFolders:
+                        #trajFiles   = [file for file in os.listdir(subFolder) if file.endswith('.txt')]
+                        xyzFiles    = [os.path.join(f'{subFolder}', file) for file in os.listdir(subFolder) if file.endswith('.xyz')]
+
+                        for xyzFile in xyzFiles:
+
+                            with open(xyzFile,'r') as f:
+                                if split4training:
+                                    with open(f'{self.plots[plot]["heliosOutputDir"].joinpath(self.plots[plot]["sceneName"])}_train.xyz' , "a") as t:
+                                        with open(f'{self.plots[plot]["heliosOutputDir"].joinpath(self.plots[plot]["sceneName"])}_val.xyz' , "a") as v:
+                                            with open(f'{self.plots[plot]["heliosOutputDir"].joinpath(self.plots[plot]["sceneName"])}_test.xyz' , "a") as te:
+                                                for line in f:
+                                                    x,y,z,_,_,_,_,_,label,_,_ = line.split()
+                                                    if int(label) == 0:
+                                                        label = int(1)
+                                                    elif int(label) == 1:
+                                                        label = int(2)
+                                                    elif int(label) == 4:
+                                                        label = int(3)
+                                                    else:
+                                                        label = int(4)
+
+                                                    if float(x) < center[0]:
+                                                        if float(x) >= center[0]-extend[0] and center[1]-extend[1] <= float(y) <= center[1]+extend[1]:
+                                                            t.write(f'{x} {y} {z} {label}\n')
+                                                    elif float(y) < center[1]:
+                                                        if float(x) <= center[0]+extend[0] and float(y) >= center[1]-extend[1]:
+                                                            v.write(f'{x} {y} {z} {label}\n')
+                                                    elif float(y) >= center[1]:
+                                                        if float(x) <= center[0]+extend[0] and float(y) <= center[1]+extend[1]:
+                                                            te.write(f'{x} {y} {z} {label}\n')
+                                else:
                                     with open(f'{self.plots[plot]["heliosOutputDir"].joinpath(self.plots[plot]["sceneName"])}.xyz' , "a") as w:
                                         for line in f:
                                             x,y,z,_,_,_,_,_,label,_,_ = line.split()
                                             w.write(f"{x} {y} {z} {label}\n")
-                            os.rmdir(subFolder)
+                    if removeLegs:
+                        deleteSubfolderAndFiles(folder)
 
         def loadDwGeoJSON(self):
             with open(self.path['dwData'], 'r') as f:
@@ -557,6 +576,7 @@ class GeoJSON2SimCloud:
                 self.plotting(dfDw, dfTree, self.plots[f'{plot:03d}']['scanLine'],
                               figPath=self.path['png'].joinpath(f'Plot_{plot:03d}.png'))
 
+            plt.pause(0.01)
 
         def convert2pd(self,geoJSONdat,offset):
             pointCollector  = []
@@ -625,7 +645,8 @@ class GeoJSON2SimCloud:
                                  dwPath='H:\\Blender\\buildingBlocks\\layingCylinder.obj',
                                  treePath='H:\\Blender\\buildingBlocks\\standingCylinder.obj',
                                  grassPath='H:\\Blender\\Grass\\grass.obj',
-                                 lowVegPath='H:\\Blender\\LowVeg\\lowVeg.004.obj'
+                                 lowVegPath='H:\\Blender\\LowVeg\\lowVeg.004.obj',
+                                 treeType='Cylinder'
                             ):
 
             for plot in self.plots.keys():
@@ -638,7 +659,7 @@ class GeoJSON2SimCloud:
                 subprocess.run([f'{blenderExePath}',f'-b',f'--python',f'{blenderScriptPath}',f'{groundPath}',
                                 f'{dwPath}',f'{treePath}',f'{str(self.plots[plot]["dwPath"])}',
                                 f'{str(self.plots[plot]["treePath"])}',f'{str(self.plots[plot]["dw4Helios"])}',
-                                f'{str(self.plots[plot]["tree4Helios"])}'],
+                                f'{str(self.plots[plot]["tree4Helios"])}',f'{treeType}'],
                                shell=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
 
@@ -658,19 +679,32 @@ class GeoJSON2SimCloud:
         pass
 
 
+# region Run
+# output Folders Variables
+imageFolder = 'H:\\ForestSimulation\\PythonFigures\\'
+pdfFolder   = 'H:\\ForestSimulation\\PythonPDF\\'
+
+
+dwFolder   = 'H:\\Blender\\csv4blender\\'
+treeFolder = 'H:\\Blender\\csv4blender\\'
+
+# DataFiles:
+dwPath      = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\dw_2022.GeoJSON'
+treePath    = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\trees_2022.GeoJSON'
+
+# PositionFile:
+txtPath     = 'C:\\Users\\luckmanu\\Downloads\\deadwood_data\\possiblePlots2.txt'
+
+
 test = GeoJSON2SimCloud(wdir='D:\\Simulation')
 
 test.newProject(treePath=treePath,dwPath=dwPath,plotPath=txtPath)
 test.currentProject.preparePlots()
-test.currentProject.blenderRunPlots()
+test.currentProject.blenderRunPlots(treePath='H:\\Blender\\buildingBlocks\\poplar\\',treeType='Model')
 test.currentProject.writeXml4Helios(pulseFreq=18000)
 test.currentProject.runHelios()
 test.currentProject.writeMetaFile()
-
-
-
-
-
+# endregion
 
 # class MetaData:
 #     def __init__(self,idx=''):
